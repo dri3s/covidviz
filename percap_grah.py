@@ -28,14 +28,15 @@ import numpy as np
 #path = r"C:\cygwin64\home\dries\scripts\covid-19-data\us-counties.csv"
 path = "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
 covid = pd.read_csv(path)
-
+covid['date'] = pd.to_datetime(covid.date)
 
 # In[]
 
 
-path = r"C:\Users\dries\Downloads\PEP_2018_PEPANNCHG.ST05_with_ann.csv"
+#path = r"C:\Users\dries\Downloads\PEP_2018_PEPANNCHG.ST05_with_ann.csv"
+path = 'http://www.wtad.com/assets/news_files/PEP_2018_PEPANNCHG.ST05_with_ann.xlsx'
+pop = pd.read_excel(path)
 
-pop = pd.read_csv(path, encoding='latin1')
 
 pop = pop.rename(columns={'GC.target-geo-id2':'fips',
                 'respop72018':'population'})
@@ -50,102 +51,73 @@ pop['fips'] = pd.to_numeric(pop.fips)
 
 # In[]
 
-
-path = r"C:\cygwin64\home\dries\scripts\covid-scripts\covidviz\scripts.txt"
-msa = pd.read_fwf(path, skiprows=20, names=['msa_fips','fips','x','county'])
-
-
-# In[]
-
-
-msa['fips'] = pd.to_numeric(msa.fips, errors='coerce')
+path = "G:\covidviz\metrolist.csv"
+msa = pd.read_csv(path, nrows=1160, header=None, names=['msa_fips','msa_name','fips','county_name'])
+msa.fips = pd.to_numeric(msa['fips'])
+msa = msa.drop(columns=['msa_fips','county_name'])
 
 
 # In[]
 
 
-msa['msa_fips'] = pd.to_numeric(msa.msa_fips, errors='coerce')
+covidmsa = covid.merge(pop).merge(msa)
+
+
+# In[]
+
+covidmsa = covidmsa.drop(columns='fips').groupby(['date','msa_name']).sum().reset_index()
+
+# In[]
+
+
+
+covidmsa['casepercap'] = covidmsa.cases/covidmsa['population']
+covidmsa = covidmsa.sort_values(by=['msa_name','date']).reset_index(drop=True)
+covidmsa = covidmsa.loc[covidmsa.cases >= 10]
 
 
 # In[]
 
 
-msa_cty = msa.loc[msa.fips.notna()]
+covidmsa ['num_days'] = (covidmsa.date - covidmsa.groupby(['msa_name'])['date'].transform('min')).dt.days
 
 
 # In[]
 
 
-msa.loc[msa.fips.isna() & msa.msa_fips.notna()]
 
+worst = list(covidmsa.groupby('msa_name').casepercap.max().reset_index().sort_values('casepercap').tail(10).msa_name.values)
 
-# In[]
-
-
-covid = covid.merge(pop)
-
-covid['date'] = pd.to_datetime(covid.date)
-
-covid['casepercap'] = covid.cases/covid['population']
 
 
 # In[]
 
-
-covid = covid.sort_values(by=['fips','date']).reset_index(drop=True)
-
-
-# In[]
-
-
-covid = covid.loc[covid.cases >= 10]
-
+dets = list(covidmsa.loc[covidmsa.msa_name.str.contains('Dallas')].msa_name.unique())
+dets.append(covidmsa.loc[covidmsa.msa_name.str.contains('Houston')].msa_name.unique()[0])
 
 # In[]
 
 
-covid ['num_days'] = (covid.date - covid.groupby(['fips'])['date'].transform('min')).dt.days
-
-
-# In[]
-
-
-biguns = covid.loc[covid.population >= 100e3].fips.unique().tolist()
-worst = list(covid.groupby('fips').cases.max().reset_index().sort_values('cases').tail(7).fips.values)
-dets_names = ['Harris','Fort Bend','Brazoria','Montgomery','Galveston']
-dets = covid.loc[(covid.county.isin(dets_names)) & (covid.state == 'Texas')].fips.unique()
-worst  = [d for d in worst if d not in dets]
-grays = [f for f in biguns if f not in dets and f not in worst]
-
-
-# In[]
-
-
-colors = iter(sns.color_palette('husl', len(dets) + len(worst)))
+colors = iter(sns.color_palette('husl', len(worst) + len(dets)))
 
 plt.rcParams['figure.figsize'] = 15, 5
 fig, ax = plt.subplots()
 
-for fips in grays + list(worst) + list(dets):
-    county = covid.loc[covid.fips == fips].county.unique()[0]
-    state = covid.loc[covid.fips == fips].state.unique()[0]    
+for msaname, df in covidmsa.groupby('msa_name'):          
+    df = df.sort_values(by='num_days')
     
-    if fips in worst:
-        label = county + ' County, ' + state
+    if msaname in worst or msaname in dets:
+        label = msaname
         color = next(colors)
-        lw, alpha = (1, 1)
-    elif fips in dets:
-        label = county
-        color = next(colors)
-        lw, alpha = (5, 1)
-    else:
-        label = None
+        lw, alpha = (3, 1)    
+    else:        
+        label = '_nolabel_'
         color='gray'
         lw, alpha = (0.4, 0.4)
     
-    #ax.plot(covid.loc[covid.fips == fips]['date'],
-    ax.plot(covid.loc[covid.fips == fips]['num_days'],
-            covid.loc[covid.fips == fips]['casepercap'] * 1e3, 
+    #ax.plot(covidmsa.loc[covidmsa.fips == fips]['date'],
+    ax.plot(df['num_days'],
+            df['casepercap'] * 1e3, 
             label=label,
             color=color,
             lw=lw,
@@ -156,15 +128,15 @@ for fips in grays + list(worst) + list(dets):
 #ax.xaxis.set_major_formatter(myFmt)
 #ax.xaxis.set_major_locator(mdates.WeekdayLocator(mdates.MO))
 
-ax.set_xlim([0, covid.num_days.max()])
+ax.set_xlim([0, covidmsa.num_days.max()])
 ax.set_yscale('log')
 
-ax.set_ylabel('COVID Cases per 1,000 people')
+ax.set_ylabel('covidmsa Cases per 1,000 people')
 ax.set_xlabel('Num Days Since 10th Case')
 ax.legend()
 ax.grid()
 
-#plt.savefig(r'c:\users\dries\graph.png')
+
 
 
 # In[]
