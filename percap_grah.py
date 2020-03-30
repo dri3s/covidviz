@@ -94,6 +94,8 @@ worst = list(covidmsa.groupby('msa_name').casepercap.max().reset_index().sort_va
 
 dets = list(covidmsa.loc[covidmsa.msa_name.str.contains('Dallas')].msa_name.unique())
 dets.append(covidmsa.loc[covidmsa.msa_name.str.contains('Houston')].msa_name.unique()[0])
+dets.append(covidmsa.loc[covidmsa.msa_name.str.contains('College Station')].msa_name.unique()[0])
+
 
 # In[]
 
@@ -114,6 +116,12 @@ for msaname, df in covidmsa.groupby('msa_name'):
         label = '_nolabel_'
         color='gray'
         lw, alpha = (0.4, 0.4)
+        
+    if msaname in dets:
+        ls = ':'
+        lw = 5
+    else:
+        ls = '-'
     
     #ax.plot(covidmsa.loc[covidmsa.fips == fips]['date'],
     ax.plot(df['num_days'],
@@ -121,7 +129,8 @@ for msaname, df in covidmsa.groupby('msa_name'):
             label=label,
             color=color,
             lw=lw,
-            alpha=alpha
+            alpha=alpha,
+            ls = ls
             )
 
 #ax.set_xlim([pd.to_datetime('15feb2020'),pd.to_datetime(date.today())])
